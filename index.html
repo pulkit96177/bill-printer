@@ -59,7 +59,7 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
     <summary>⚙ Google Drive setup</summary>
     <label>Web app URL<input id="cfgUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
     <label>Secret key<input id="cfgKey" type="password" autocomplete="off"></label>
-    <div class="btns" style="margin-top:0"><button id="cfgSave" class="pri sm">Save &amp; sync</button></div>
+    <div class="btns" style="margin-top:0"><button id="cfgSave" class="pri sm">Save &amp; sync</button><button id="cfgRewrite" class="sm">Rewrite all Drive files</button></div>
     <p class="note">Enter the same URL and key on each device. Bills are stored in Drive under Bills / date folders.</p>
   </details>
 
@@ -103,16 +103,20 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 
 <script>
 const BILL_CSS=`
-.bill{font-family:Arial,Helvetica,sans-serif;color:#000;width:100%}
-.bh{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5px solid #000;padding-bottom:2mm;margin-bottom:2mm;gap:3mm}
-.bh .party{font-size:14px;font-weight:700;word-break:break-word}
-.bh .date{font-size:11px;white-space:nowrap}
-.bill table{width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed}
-.bill th,.bill td{border:1px solid #000;padding:1px 3px;line-height:1.35;overflow:hidden;word-break:break-word}
-.bill th{background:#eee}
-.bill .n{text-align:right}
-.bill .s{text-align:center}
-.bill tr.tot td{font-weight:700;border-top:2px solid #000}
+.bill{font-family:Arial,Helvetica,sans-serif;color:#000;width:100%;height:100%;display:flex;flex-direction:column;border:1.2px solid #000;box-sizing:border-box}
+.bh{flex:none;height:10mm;display:flex;justify-content:space-between;align-items:center;gap:3mm;padding:0 2.5mm;border-bottom:1.2px solid #000}
+.bh .party{font-size:15px;font-weight:700;line-height:1.1;max-height:9mm;overflow:hidden;word-break:break-word}
+.bh .date{font-size:12px;font-weight:600;white-space:nowrap}
+.bt{flex:1;min-height:0;display:grid;grid-template-rows:7mm repeat(18,minmax(0,1fr)) 8mm}
+.bt .r{display:grid;grid-template-columns:7mm 1fr 11mm 13mm 17mm;border-bottom:1px solid #000;min-height:0}
+.bt .r:nth-last-child(2){border-bottom:0}
+.bt .r:last-child{border-bottom:0;border-top:1.5px solid #000}
+.bt .c{display:flex;align-items:center;padding:0 1.2mm;border-right:1px solid #000;font-size:10px;line-height:1.1;overflow:hidden;min-width:0;word-break:break-word}
+.bt .c:last-child{border-right:0}
+.bt .c.n{justify-content:flex-end;text-align:right}
+.bt .c.s{justify-content:center;padding:0}
+.bt .h .c{background:#eee;font-weight:700}
+.bt .tr .c{font-weight:700;font-size:11px}
 `;
 const st=document.createElement('style');st.textContent=BILL_CSS;document.head.appendChild(st);
 
@@ -154,14 +158,18 @@ function totals(items){
 }
 function billHtml(b){
   const t=totals(b.items);
-  const body=b.items.map((i,n)=>`<tr><td class="s">${n+1}</td><td>${esc(i.item)}</td><td class="n">${fmt(i.qty)}</td><td class="n">${fmt(i.rate)}</td><td class="n">${fmt(r2(i.qty*i.rate))}</td></tr>`).join('');
+  let body='';
+  for(let n=0;n<MAX;n++){
+    const i=b.items[n];
+    body+=i
+      ?`<div class="r"><div class="c s">${n+1}</div><div class="c">${esc(i.item)}</div><div class="c n">${fmt(i.qty)}</div><div class="c n">${fmt(i.rate)}</div><div class="c n">${fmt(r2(i.qty*i.rate))}</div></div>`
+      :`<div class="r"><div class="c s"></div><div class="c"></div><div class="c n"></div><div class="c n"></div><div class="c n"></div></div>`;
+  }
   return `<div class="bill"><div class="bh"><div class="party">${esc(b.party)}</div><div class="date">${dmy(b.date)}</div></div>
-<table><colgroup><col style="width:8mm"><col><col style="width:12mm"><col style="width:13mm"><col style="width:17mm"></colgroup>
-<thead><tr><th class="s">S.no</th><th>Item</th><th class="n">Qty</th><th class="n">Rate</th><th class="n">Total</th></tr></thead>
-<tbody>${body}<tr class="tot"><td></td><td>Total items: ${t.count}</td><td class="n">${fmt(t.qty)}</td><td></td><td class="n">${fmt(t.amt)}</td></tr></tbody></table></div>`;
+<div class="bt"><div class="r h"><div class="c s">S.no</div><div class="c">Item</div><div class="c n">Qty</div><div class="c n">Rate</div><div class="c n">Total</div></div>${body}<div class="r tr"><div class="c"></div><div class="c">Total items: ${t.count}</div><div class="c n">${fmt(t.qty)}</div><div class="c n"></div><div class="c n">${fmt(t.amt)}</div></div></div></div>`;
 }
 function billFileHtml(b){
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(b.party)} ${dmy(b.date)}</title><style>@page{size:A4;margin:10mm}body{margin:0}.w{width:105mm;padding:6mm}${BILL_CSS}</style></head><body><div class="w">${billHtml(b)}</div></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(b.party)} ${dmy(b.date)}</title><style>@page{size:A4;margin:10mm}body{margin:0}.w{width:105mm;height:148mm;padding:6mm;box-sizing:border-box}${BILL_CSS}</style></head><body><div class="w">${billHtml(b)}</div></body></html>`;
 }
 
 /* ---------- Form ---------- */
@@ -306,6 +314,12 @@ $('#cfgSave').onclick=()=>{
   cfg={url:$('#cfgUrl').value.trim(),key:$('#cfgKey').value.trim()};
   try{localStorage.setItem('cfg',JSON.stringify(cfg))}catch(e){}
   sync(true);
+};
+
+$('#cfgRewrite').onclick=()=>{
+  if(!confirm('Re-upload every bill so the Drive HTML files use the current layout?'))return;
+  const n=Date.now();bills.forEach(b=>{b.updated=n;b.dirty=true});
+  persist();refresh();sync(true);
 };
 
 /* ---------- Sheet ---------- */
