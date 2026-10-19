@@ -15,7 +15,7 @@ h2{font-size:14px;margin:0 0 8px;color:#444}
 label{display:block;font-size:12px;color:#555;margin-bottom:6px}
 input{font-size:16px;padding:8px;border:1px solid #bbb;border-radius:6px;width:100%;min-width:0}
 .r2{display:grid;grid-template-columns:1fr 150px;gap:8px;margin-bottom:10px}
-.row{display:grid;grid-template-columns:20px 1fr 58px 62px 58px 26px;gap:4px;align-items:center;margin-bottom:5px}
+.row{display:grid;grid-template-columns:18px minmax(0,1fr) minmax(46px,.3fr) minmax(50px,.32fr) minmax(46px,.3fr) 24px;gap:4px;align-items:center;margin-bottom:5px}
 .row input{padding:7px 5px}
 .row .sn{font-size:12px;color:#777;text-align:center}
 .row .tl{font-size:13px;text-align:right}
@@ -28,7 +28,7 @@ button.sm{font-size:13px;padding:5px 8px}
 .slots{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
 .slot{border:1px dashed #999;border-radius:6px;padding:6px;font-size:13px;min-height:44px;display:flex;justify-content:space-between;gap:4px}
 .slot.empty{color:#aaa}
-.hb{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;border-top:1px solid #eee;font-size:14px}
+.hb{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;border-top:1px solid #eee;font-size:14px}
 .hb .btn-grp{display:flex;gap:4px;flex-shrink:0}
 .pend{color:#e65100;font-size:12px}
 details{margin-bottom:6px}
@@ -42,6 +42,18 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 .sheet{width:210mm;height:296mm;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;background:#fff;margin:0;transform-origin:top left}
 .q{padding:6mm;border:.3mm dashed #bbb;overflow:hidden;height:148mm;width:105mm}
 .preview-title{max-width:720px;margin:0 auto;padding:0 10px}
+@media (max-width:420px){
+  #app{padding:6px}
+  .card{padding:10px}
+  .r2{grid-template-columns:minmax(0,1fr) 128px}
+  input{font-size:15px;padding:7px 6px}
+  .row{gap:3px}
+  .row input{padding:7px 3px}
+  button{font-size:14px;padding:8px 11px}
+}
+@media (min-width:900px){
+  #app{max-width:820px}
+}
 @media print{
   @page{size:A4;margin:0}
   html,body{background:#fff!important;margin:0}
@@ -334,11 +346,15 @@ function renderSheet(){
   fitSheet();
 }
 function fitSheet(){
-  const z=Math.min(1,(window.innerWidth-16)/794);
+  const avail=document.documentElement.clientWidth-16;
+  const z=Math.max(0.25,Math.min(1,avail/794));
   $('#sheet').style.transform=`scale(${z})`;
   const w=$('#sheetWrap');w.style.width=(794*z)+'px';w.style.height=(1120*z)+'px';
 }
 window.addEventListener('resize',fitSheet);
+window.addEventListener('orientationchange',()=>setTimeout(fitSheet,250));
+if(window.visualViewport)visualViewport.addEventListener('resize',fitSheet);
+if(window.ResizeObserver)new ResizeObserver(fitSheet).observe(document.documentElement);
 $('#slots').addEventListener('click',e=>{
   const i=e.target.dataset.rm;if(i===undefined)return;
   sheetIds.splice(+i,1);persist();renderSheet();
