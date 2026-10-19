@@ -73,6 +73,7 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
     <summary>⚙ Google Drive setup</summary>
     <label>Web app URL<input id="cfgUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
     <label>Secret key<input id="cfgKey" type="password" autocomplete="off"></label>
+    <label>Firm name on bill<input id="cfgFirm" autocomplete="off" placeholder="SKT"></label>
     <div class="btns" style="margin-top:0"><button id="cfgSave" class="pri sm">Save &amp; sync</button><button id="cfgRewrite" class="sm">Rewrite all Drive files</button></div>
     <p class="note">Enter the same URL and key on each device. Bills are stored in Drive under Bills / date folders.</p>
   </details>
@@ -129,9 +130,13 @@ const BILL_CSS=`
 .bh{flex:none;height:10mm;display:flex;justify-content:space-between;align-items:center;gap:3mm;padding:0 2.5mm;border-bottom:1.2px solid #000}
 .bh .party{font-size:15px;font-weight:700;line-height:1.1;max-height:9mm;overflow:hidden;word-break:break-word}
 .bh .date{font-size:12px;font-weight:600;white-space:nowrap}
+.bb{flex:none;height:12mm;display:flex;align-items:center;justify-content:center;padding:0 2.5mm;border-bottom:1.2px solid #000;overflow:hidden}
+.bb:before,.bb:after{content:"";flex:1;border-top:3px double #000;min-width:4mm}
+.bb span{font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:700;line-height:1;white-space:nowrap;margin:0 3mm;overflow:hidden;text-overflow:ellipsis;max-width:75%}
 .bt{flex:1;min-height:0;display:grid;grid-template-rows:7mm repeat(18,minmax(0,1fr)) 8mm}
 .bt .r{display:grid;grid-template-columns:7mm 1fr 11mm 13mm 17mm;border-bottom:1px solid #000;min-height:0}
 .bt .r:nth-last-child(2){border-bottom:0}
+.bt .r.e{border-bottom:0}
 .bt .r:last-child{border-bottom:0;border-top:1.5px solid #000}
 .bt .c{display:flex;align-items:center;padding:0 1.2mm;border-right:1px solid #000;font-size:10px;line-height:1.1;overflow:hidden;min-width:0;word-break:break-word}
 .bt .c:last-child{border-right:0}
@@ -175,6 +180,11 @@ const pendingCount=()=>bills.filter(isDirty).length+dels.length;
 function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',3200)}
 
 /* ---------- Bill rendering ---------- */
+let firm=(function(){try{return localStorage.getItem('firm')||'SKT'}catch(e){return 'SKT'}})();
+function brandHtml(){
+  const n=firm.length,size=n<=5?26:n<=10?19:14,sp=n<=5?'.3em':'.1em';
+  return `<div class="bb"><span style="font-size:${size}px;letter-spacing:${sp};padding-left:${sp}">${esc(firm)}</span></div>`;
+}
 function totals(items){
   let qty=0,amt=0;
   items.forEach(i=>{qty+=num(i.qty);amt+=r2(num(i.qty)*num(i.rate))});
@@ -187,9 +197,9 @@ function billHtml(b){
     const i=b.items[n];
     body+=i
       ?`<div class="r"><div class="c s">${n+1}</div><div class="c">${esc(i.item)}</div><div class="c n">${fmt(i.qty)}</div><div class="c n">${fmt(i.rate)}</div><div class="c n">${fmt(r2(i.qty*i.rate))}</div></div>`
-      :`<div class="r"><div class="c s"></div><div class="c"></div><div class="c n"></div><div class="c n"></div><div class="c n"></div></div>`;
+      :`<div class="r e"><div class="c s"></div><div class="c"></div><div class="c n"></div><div class="c n"></div><div class="c n"></div></div>`;
   }
-  return `<div class="bill"><div class="bh"><div class="party">${esc(b.party)}</div><div class="date">${dmy(b.date)}</div></div>
+  return `<div class="bill">${brandHtml()}<div class="bh"><div class="party">${esc(b.party)}</div><div class="date">${dmy(b.date)}</div></div>
 <div class="bt"><div class="r h"><div class="c s">S.no</div><div class="c">Item</div><div class="c n">Qty</div><div class="c n">Rate</div><div class="c n">Total</div></div>${body}<div class="r tr"><div class="c"></div><div class="c">Total items: ${t.count}</div><div class="c n">${fmt(t.qty)}</div><div class="c n"></div><div class="c n">${fmt(t.amt)}</div></div></div></div>`;
 }
 function billFileHtml(b){
@@ -342,6 +352,9 @@ setInterval(()=>sync(),60000);
 $('#status').onclick=()=>sync(true);
 $('#cfgSave').onclick=()=>{
   cfg={url:$('#cfgUrl').value.trim(),key:$('#cfgKey').value.trim()};
+  firm=$('#cfgFirm').value.trim()||'SKT';
+  try{localStorage.setItem('firm',firm)}catch(e){}
+  renderSheet();
   try{localStorage.setItem('cfg',JSON.stringify(cfg))}catch(e){}
   sync(true);
 };
@@ -476,7 +489,7 @@ function refresh(){refreshLists();renderSheet();renderHistory();setStatus()}
 /* ---------- Init ---------- */
 bills.forEach(b=>{if(!b.updated)b.updated=b.created||Date.now();if(!b.created)b.created=b.updated});
 $('#date').value=today();
-$('#cfgUrl').value=cfg.url;$('#cfgKey').value=cfg.key;
+$('#cfgUrl').value=cfg.url;$('#cfgKey').value=cfg.key;$('#cfgFirm').value=firm;
 if(!cfg.url)$('#settings').open=true;
 renderRows();renderMasters();refresh();sync();
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
