@@ -38,15 +38,16 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 #status{font-size:12px;padding:5px 9px;border-radius:14px;background:#e8f5e9;color:#1b5e20;border:0;cursor:pointer;white-space:nowrap}
 #status.warn{background:#fff3e0;color:#e65100}
 #status.off{background:#eceff1;color:#546e7a}
-#sheetWrap{overflow:hidden}
-.sheet{width:210mm;height:296mm;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;background:#fff;margin:0 auto}
+#sheetWrap{overflow:hidden;margin:0 auto}
+.sheet{width:210mm;height:296mm;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;background:#fff;margin:0;transform-origin:top left}
 .q{padding:6mm;border:.3mm dashed #bbb;overflow:hidden;height:148mm;width:105mm}
 .preview-title{max-width:720px;margin:0 auto;padding:0 10px}
 @media print{
   @page{size:A4;margin:0}
   html,body{background:#fff!important;margin:0}
   .no-print{display:none!important}
-  #sheetWrap{zoom:1!important;margin:0!important}
+  #sheetWrap{width:auto!important;height:auto!important;margin:0!important;overflow:visible!important}
+  .sheet{transform:none!important}
   .q{border-color:#ccc}
 }
 </style>
@@ -103,7 +104,7 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 
 <script>
 const BILL_CSS=`
-.bill{font-family:Arial,Helvetica,sans-serif;color:#000;width:100%;height:100%;display:flex;flex-direction:column;border:1.2px solid #000;box-sizing:border-box}
+.bill{font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:none;text-size-adjust:none;color:#000;width:100%;height:100%;display:flex;flex-direction:column;border:1.2px solid #000;box-sizing:border-box}
 .bh{flex:none;height:10mm;display:flex;justify-content:space-between;align-items:center;gap:3mm;padding:0 2.5mm;border-bottom:1.2px solid #000}
 .bh .party{font-size:15px;font-weight:700;line-height:1.1;max-height:9mm;overflow:hidden;word-break:break-word}
 .bh .date{font-size:12px;font-weight:600;white-space:nowrap}
@@ -113,9 +114,9 @@ const BILL_CSS=`
 .bt .r:last-child{border-bottom:0;border-top:1.5px solid #000}
 .bt .c{display:flex;align-items:center;padding:0 1.2mm;border-right:1px solid #000;font-size:10px;line-height:1.1;overflow:hidden;min-width:0;word-break:break-word}
 .bt .c:last-child{border-right:0}
-.bt .c.n{justify-content:flex-end;text-align:right}
+.bt .c.n{justify-content:flex-end;text-align:right;white-space:nowrap}
 .bt .c.s{justify-content:center;padding:0}
-.bt .h .c{background:#eee;font-weight:700}
+.bt .h .c{background:#eee;font-weight:700;white-space:nowrap}
 .bt .tr .c{font-weight:700;font-size:11px}
 `;
 const st=document.createElement('style');st.textContent=BILL_CSS;document.head.appendChild(st);
@@ -332,7 +333,11 @@ function renderSheet(){
   $('#sheet').innerHTML=[0,1,2,3].map(i=>`<div class="q">${sb[i]?billHtml(sb[i]):''}</div>`).join('');
   fitSheet();
 }
-function fitSheet(){$('#sheetWrap').style.zoom=Math.min(1,Math.min(window.innerWidth-16,794)/794)}
+function fitSheet(){
+  const z=Math.min(1,(window.innerWidth-16)/794);
+  $('#sheet').style.transform=`scale(${z})`;
+  const w=$('#sheetWrap');w.style.width=(794*z)+'px';w.style.height=(1120*z)+'px';
+}
 window.addEventListener('resize',fitSheet);
 $('#slots').addEventListener('click',e=>{
   const i=e.target.dataset.rm;if(i===undefined)return;
