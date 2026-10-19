@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bill Printer</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,Arial,sans-serif;background:#f2f3f5;color:#1a1a1a}
+#app{max-width:720px;margin:0 auto;padding:10px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+h1{font-size:18px;margin:6px 0 10px}
+h2{font-size:14px;margin:0 0 8px;color:#444}
+.card{background:#fff;border-radius:10px;padding:12px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+label{display:block;font-size:12px;color:#555;margin-bottom:6px}
+input{font-size:16px;padding:8px;border:1px solid #bbb;border-radius:6px;width:100%;min-width:0}
+.r2{display:grid;grid-template-columns:1fr 150px;gap:8px;margin-bottom:10px}
+.row{display:grid;grid-template-columns:20px 1fr 58px 62px 58px 26px;gap:4px;align-items:center;margin-bottom:5px}
+.row input{padding:7px 5px}
+.row .sn{font-size:12px;color:#777;text-align:center}
+.row .tl{font-size:13px;text-align:right}
+.row .x{padding:0;border:0;background:none;font-size:20px;color:#c00}
+button{font-size:15px;padding:9px 14px;border:1px solid #999;border-radius:8px;background:#fff;cursor:pointer}
+button.pri{background:#1565c0;color:#fff;border-color:#1565c0}
+button.sm{font-size:13px;padding:5px 8px}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.sum{margin-top:10px;font-size:14px;font-weight:600}
+.slots{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.slot{border:1px dashed #999;border-radius:6px;padding:6px;font-size:13px;min-height:44px;display:flex;justify-content:space-between;gap:4px}
+.slot.empty{color:#aaa}
+.hb{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;border-top:1px solid #eee;font-size:14px}
+.hb .btn-grp{display:flex;gap:4px;flex-shrink:0}
+.pend{color:#e65100;font-size:12px}
+details{margin-bottom:6px}
+summary{cursor:pointer;font-weight:600;padding:4px 0}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:8px;font-size:14px;display:none;z-index:10;max-width:90vw}
+.note{font-size:12px;color:#666;margin:6px 0 0}
+#status{font-size:12px;padding:5px 9px;border-radius:14px;background:#e8f5e9;color:#1b5e20;border:0;cursor:pointer;white-space:nowrap}
+#status.warn{background:#fff3e0;color:#e65100}
+#status.off{background:#eceff1;color:#546e7a}
+#sheetWrap{overflow:hidden}
+.sheet{width:210mm;height:296mm;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;background:#fff;margin:0 auto}
+.q{padding:6mm;border:.3mm dashed #bbb;overflow:hidden;height:148mm;width:105mm}
+.preview-title{max-width:720px;margin:0 auto;padding:0 10px}
+@media print{
+  @page{size:A4;margin:0}
+  html,body{background:#fff!important;margin:0}
+  .no-print{display:none!important}
+  #sheetWrap{zoom:1!important;margin:0!important}
+  .q{border-color:#ccc}
+}
+</style>
+</head>
+<body>
+<div id="app" class="no-print">
+  <div class="top"><h1>Bill Printer</h1><button id="status" title="Tap to sync now">…</button></div>
+
+  <details class="card" id="settings">
+    <summary>⚙ Google Drive setup</summary>
+    <label>Web app URL<input id="cfgUrl" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
+    <label>Secret key<input id="cfgKey" type="password" autocomplete="off"></label>
+    <div class="btns" style="margin-top:0"><button id="cfgSave" class="pri sm">Save &amp; sync</button></div>
+    <p class="note">Enter the same URL and key on each device. Bills are stored in Drive under Bills / date folders.</p>
+  </details>
+
+  <div class="card">
+    <h2 id="formTitle">New bill</h2>
+    <div class="r2">
+      <label>Party name<input id="party" list="parties" autocomplete="off" placeholder="Party name"></label>
+      <label>Date<input id="date" type="date"></label>
+    </div>
+    <div id="rows"></div>
+    <button id="addRow" class="sm">+ Add item</button>
+    <div class="sum" id="sum"></div>
+    <div class="btns">
+      <button id="saveBtn" class="pri">Save &amp; add to sheet</button>
+      <button id="clearBtn">Clear</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Sheet (4 bills per A4)</h2>
+    <div class="slots" id="slots"></div>
+    <div class="btns">
+      <button id="printBtn" class="pri">Print sheet</button>
+      <button id="clearSheet">Clear sheet</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Saved bills (date folders)</h2>
+    <div id="history"></div>
+  </div>
+</div>
+
+<div class="preview-title no-print"><h2 style="margin:4px 0 8px">Print preview</h2></div>
+<div id="sheetWrap"><div class="sheet" id="sheet"></div></div>
+<div style="height:30px" class="no-print"></div>
+
+<datalist id="parties"></datalist>
+<datalist id="items"></datalist>
+<div id="toast"></div>
+
+<script>
+const BILL_CSS=`
+.bill{font-family:Arial,Helvetica,sans-serif;color:#000;width:100%}
+.bh{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1.5px solid #000;padding-bottom:2mm;margin-bottom:2mm;gap:3mm}
+.bh .party{font-size:14px;font-weight:700;word-break:break-word}
+.bh .date{font-size:11px;white-space:nowrap}
+.bill table{width:100%;border-collapse:collapse;font-size:10px;table-layout:fixed}
+.bill th,.bill td{border:1px solid #000;padding:1px 3px;line-height:1.35;overflow:hidden;word-break:break-word}
+.bill th{background:#eee}
+.bill .n{text-align:right}
+.bill .s{text-align:center}
+.bill tr.tot td{font-weight:700;border-top:2px solid #000}
+`;
+const st=document.createElement('style');st.textContent=BILL_CSS;document.head.appendChild(st);
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const MAX=18;
+const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n};
+const r2=n=>Math.round(n*100)/100;
+const fmt=n=>{n=r2(n);return Number.isInteger(n)?String(n):n.toFixed(2)};
+const pad=n=>String(n).padStart(2,'0');
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+const dmy=iso=>iso.split('-').reverse().join('-');
+const safe=s=>s.replace(/[^\w\-]+/g,'_').slice(0,40)||'bill';
+
+function load(k,d){try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}}
+function persist(){try{
+  localStorage.setItem('bills',JSON.stringify(bills));
+  localStorage.setItem('sheet',JSON.stringify(sheetIds));
+  localStorage.setItem('dels',JSON.stringify(dels));
+}catch(e){}}
+let bills=load('bills',[]);
+let sheetIds=load('sheet',[]);
+let dels=load('dels',[]);
+let cfg=load('cfg',{url:'',key:''});
+let rows=[{item:'',qty:'',rate:''}];
+let editingId=null;
+let rateMap={};
+let lastSync=null,syncing=false,lastError='';
+const isDirty=b=>b.dirty!==false;       // never confirmed on Drive yet
+const pendingCount=()=>bills.filter(isDirty).length+dels.length;
+
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',3200)}
+
+/* ---------- Bill rendering ---------- */
+function totals(items){
+  let qty=0,amt=0;
+  items.forEach(i=>{qty+=num(i.qty);amt+=r2(num(i.qty)*num(i.rate))});
+  return {count:items.length,qty:r2(qty),amt:r2(amt)};
+}
+function billHtml(b){
+  const t=totals(b.items);
+  const body=b.items.map((i,n)=>`<tr><td class="s">${n+1}</td><td>${esc(i.item)}</td><td class="n">${fmt(i.qty)}</td><td class="n">${fmt(i.rate)}</td><td class="n">${fmt(r2(i.qty*i.rate))}</td></tr>`).join('');
+  return `<div class="bill"><div class="bh"><div class="party">${esc(b.party)}</div><div class="date">${dmy(b.date)}</div></div>
+<table><colgroup><col style="width:8mm"><col><col style="width:12mm"><col style="width:13mm"><col style="width:17mm"></colgroup>
+<thead><tr><th class="s">S.no</th><th>Item</th><th class="n">Qty</th><th class="n">Rate</th><th class="n">Total</th></tr></thead>
+<tbody>${body}<tr class="tot"><td></td><td>Total items: ${t.count}</td><td class="n">${fmt(t.qty)}</td><td></td><td class="n">${fmt(t.amt)}</td></tr></tbody></table></div>`;
+}
+function billFileHtml(b){
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(b.party)} ${dmy(b.date)}</title><style>@page{size:A4;margin:10mm}body{margin:0}.w{width:105mm;padding:6mm}${BILL_CSS}</style></head><body><div class="w">${billHtml(b)}</div></body></html>`;
+}
+
+/* ---------- Form ---------- */
+function validRows(){return rows.filter(r=>r.item.trim()||num(r.qty))}
+function rowTotal(r){return r2(num(r.qty)*num(r.rate))}
+function renderRows(){
+  $('#rows').innerHTML=rows.map((r,i)=>`<div class="row" data-i="${i}"><span class="sn">${i+1}</span>
+<input class="it" list="items" autocomplete="off" placeholder="Item" value="${esc(r.item)}">
+<input class="qt" type="number" inputmode="decimal" step="any" placeholder="Qty" value="${esc(r.qty)}">
+<input class="rt" type="number" inputmode="decimal" step="any" placeholder="Rate" value="${esc(r.rate)}">
+<span class="tl">${rowTotal(r)?fmt(rowTotal(r)):''}</span><button class="x" tabindex="-1">×</button></div>`).join('');
+  updateSum();
+}
+function updateSum(){
+  const t=totals(validRows().map(r=>({qty:num(r.qty),rate:num(r.rate),item:r.item})));
+  $('#sum').innerHTML=`Items: ${t.count}/${MAX} &nbsp;·&nbsp; Qty: ${fmt(t.qty)} &nbsp;·&nbsp; Total: ${fmt(t.amt)}`;
+}
+function focusRow(i,cls){const el=document.querySelector(`.row[data-i="${i}"] .${cls}`);if(el)el.focus()}
+function addRow(){rows.push({item:'',qty:'',rate:''});renderRows();focusRow(rows.length-1,'it')}
+
+$('#rows').addEventListener('input',e=>{
+  const row=e.target.closest('.row');if(!row)return;
+  const r=rows[+row.dataset.i];
+  if(e.target.classList.contains('it'))r.item=e.target.value;
+  if(e.target.classList.contains('qt'))r.qty=e.target.value;
+  if(e.target.classList.contains('rt'))r.rate=e.target.value;
+  row.querySelector('.tl').textContent=rowTotal(r)?fmt(rowTotal(r)):'';
+  updateSum();
+});
+$('#rows').addEventListener('change',e=>{
+  if(!e.target.classList.contains('it'))return;
+  const row=e.target.closest('.row'),r=rows[+row.dataset.i];
+  const key=r.item.trim().toLowerCase();
+  if(key&&rateMap[key]!==undefined&&!r.rate){
+    r.rate=String(rateMap[key]);row.querySelector('.rt').value=r.rate;
+    row.querySelector('.tl').textContent=rowTotal(r)?fmt(rowTotal(r)):'';updateSum();
+  }
+});
+$('#rows').addEventListener('click',e=>{
+  if(!e.target.classList.contains('x'))return;
+  const i=+e.target.closest('.row').dataset.i;
+  if(rows.length===1)rows=[{item:'',qty:'',rate:''}];else rows.splice(i,1);
+  renderRows();
+});
+$('#rows').addEventListener('keydown',e=>{
+  if(e.key!=='Enter')return;
+  e.preventDefault();
+  const row=e.target.closest('.row');if(!row)return;
+  const i=+row.dataset.i;
+  if(e.target.classList.contains('it'))focusRow(i,'qt');
+  else if(e.target.classList.contains('qt'))focusRow(i,'rt');
+  else if(e.target.classList.contains('rt')){if(i===rows.length-1)addRow();else focusRow(i+1,'it')}
+});
+$('#addRow').onclick=addRow;
+$('#clearBtn').onclick=resetForm;
+function resetForm(){
+  editingId=null;rows=[{item:'',qty:'',rate:''}];
+  $('#party').value='';$('#formTitle').textContent='New bill';
+  renderRows();
+}
+
+/* ---------- Save (always local first) ---------- */
+function saveBill(){
+  const party=$('#party').value.trim();
+  const date=$('#date').value||today();
+  const items=validRows().map(r=>({item:r.item.trim(),qty:num(r.qty),rate:num(r.rate)}));
+  if(!party)return toast('Enter party name');
+  if(!items.length)return toast('Add at least one item');
+  if(items.length>MAX)return toast(`Max ${MAX} items fit in one quarter`);
+  const now=Date.now();
+  let b;
+  if(editingId){
+    b=bills.find(x=>x.id===editingId);
+    if(b.date!==date||b.party!==party)b.file=null;
+    Object.assign(b,{party,date,items});
+  }else{
+    b={id:now.toString(36)+Math.random().toString(36).slice(2,6),party,date,items,created:now};
+    bills.push(b);
+  }
+  b.updated=now;b.dirty=true;
+  if(!b.file){const n=new Date(b.created);b.file=pad(n.getHours())+pad(n.getMinutes())+pad(n.getSeconds())+'_'+safe(party)+'_'+b.id.slice(-4)+'.html'}
+  let msg=navigator.onLine&&cfg.url?'Saved, syncing to Drive':'Saved on device, will sync when online';
+  if(!sheetIds.includes(b.id)){
+    if(sheetIds.length<4){sheetIds.push(b.id);msg+=` · quarter ${sheetIds.length}`}
+    else msg+=' · sheet is full, print or clear it first';
+  }
+  persist();resetForm();refresh();toast(msg);
+  sync();
+}
+$('#saveBtn').onclick=saveBill;
+
+/* ---------- Drive sync ---------- */
+function setStatus(){
+  const s=$('#status'),n=pendingCount();
+  s.className='';
+  if(!cfg.url||!cfg.key){s.textContent='Drive not set up';s.className='off';return}
+  if(syncing){s.textContent='Syncing…';s.className='off';return}
+  if(!navigator.onLine){s.textContent='Offline'+(n?` · ${n} pending`:'');s.className='warn';return}
+  if(lastError){s.textContent='Sync failed'+(n?` · ${n} pending`:'');s.className='warn';s.title=lastError;return}
+  if(n){s.textContent=`${n} pending`;s.className='warn';return}
+  s.textContent='Synced'+(lastSync?' '+pad(lastSync.getHours())+':'+pad(lastSync.getMinutes()):'');
+}
+async function sync(manual){
+  if(!cfg.url||!cfg.key){if(manual)toast('Enter Drive URL and key in setup');setStatus();return}
+  if(syncing)return;
+  if(!navigator.onLine){if(manual)toast('Offline, will sync when online');setStatus();return}
+  syncing=true;lastError='';setStatus();
+  try{
+    const send=bills.filter(isDirty);
+    const sentUpd={};send.forEach(b=>sentUpd[b.id]=b.updated);
+    const sendDels=dels.slice();
+    const body={key:cfg.key,deletes:sendDels,bills:send.map(b=>{const {dirty,...clean}=b;return {bill:clean,html:billFileHtml(b)}})};
+    const res=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
+    const j=await res.json();
+    if(!j.ok)throw new Error(j.error||'Server error');
+
+    send.forEach(b=>{if(b.updated===sentUpd[b.id])b.dirty=false});
+    dels=dels.filter(id=>!sendDels.includes(id));
+
+    const remote=new Set(j.bills.map(b=>b.id));
+    j.bills.forEach(rb=>{
+      if(dels.includes(rb.id))return;
+      const l=bills.find(x=>x.id===rb.id);
+      if(!l)bills.push({...rb,dirty:false});
+      else if(!isDirty(l)&&rb.updated>l.updated)Object.assign(l,rb,{dirty:false});
+    });
+    bills=bills.filter(b=>isDirty(b)||remote.has(b.id));   // drop ones deleted on another device
+    lastSync=new Date();
+    persist();refresh();
+    if(manual)toast('Synced');
+  }catch(e){
+    lastError=String(e.message||e);
+    if(manual)toast('Sync failed: '+lastError);
+  }finally{syncing=false;setStatus()}
+}
+window.addEventListener('online',()=>sync());
+window.addEventListener('offline',setStatus);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync()});
+setInterval(()=>sync(),60000);
+$('#status').onclick=()=>sync(true);
+$('#cfgSave').onclick=()=>{
+  cfg={url:$('#cfgUrl').value.trim(),key:$('#cfgKey').value.trim()};
+  try{localStorage.setItem('cfg',JSON.stringify(cfg))}catch(e){}
+  sync(true);
+};
+
+/* ---------- Sheet ---------- */
+function sheetBills(){return sheetIds.map(id=>bills.find(b=>b.id===id)).filter(Boolean)}
+function renderSheet(){
+  const sb=sheetBills();sheetIds=sb.map(b=>b.id);
+  $('#slots').innerHTML=[0,1,2,3].map(i=>sb[i]
+    ?`<div class="slot"><span><b>${i+1}.</b> ${esc(sb[i].party)}<br><small>${fmt(totals(sb[i].items).amt)}</small></span><button class="sm" data-rm="${i}">×</button></div>`
+    :`<div class="slot empty"><span><b>${i+1}.</b> empty</span></div>`).join('');
+  $('#sheet').innerHTML=[0,1,2,3].map(i=>`<div class="q">${sb[i]?billHtml(sb[i]):''}</div>`).join('');
+  fitSheet();
+}
+function fitSheet(){$('#sheetWrap').style.zoom=Math.min(1,Math.min(window.innerWidth-16,794)/794)}
+window.addEventListener('resize',fitSheet);
+$('#slots').addEventListener('click',e=>{
+  const i=e.target.dataset.rm;if(i===undefined)return;
+  sheetIds.splice(+i,1);persist();renderSheet();
+});
+$('#clearSheet').onclick=()=>{sheetIds=[];persist();renderSheet()};
+$('#printBtn').onclick=()=>{
+  if(!sheetBills().length)return toast('Sheet is empty');
+  window.print();
+};
+
+/* ---------- History ---------- */
+function renderHistory(){
+  const byDate={};
+  bills.forEach(b=>(byDate[b.date]=byDate[b.date]||[]).push(b));
+  const dates=Object.keys(byDate).sort().reverse();
+  if(!dates.length){$('#history').innerHTML='<p class="note">No saved bills yet.</p>';return}
+  $('#history').innerHTML=dates.map((d,k)=>`<details ${k===0?'open':''}><summary>📁 ${dmy(d)} (${byDate[d].length})</summary>`+
+    byDate[d].slice().sort((a,b)=>b.created-a.created).map(b=>`<div class="hb"><span>${esc(b.party)} · <b>${fmt(totals(b.items).amt)}</b>${isDirty(b)?' <span class="pend">● not on Drive yet</span>':''}</span><span class="btn-grp">
+<button class="sm" data-a="add" data-id="${b.id}">+Sheet</button><button class="sm" data-a="edit" data-id="${b.id}">Edit</button><button class="sm" data-a="dl" data-id="${b.id}">⬇</button><button class="sm" data-a="del" data-id="${b.id}">🗑</button></span></div>`).join('')+`</details>`).join('');
+}
+$('#history').addEventListener('click',e=>{
+  const a=e.target.dataset.a,id=e.target.dataset.id;if(!a)return;
+  const b=bills.find(x=>x.id===id);if(!b)return;
+  if(a==='add'){
+    if(sheetIds.includes(id))return toast('Already on sheet');
+    if(sheetIds.length>=4)return toast('Sheet is full');
+    sheetIds.push(id);persist();renderSheet();toast(`Added to quarter ${sheetIds.length}`);
+  }
+  if(a==='edit'){
+    editingId=id;$('#party').value=b.party;$('#date').value=b.date;
+    rows=b.items.map(i=>({item:i.item,qty:String(i.qty),rate:String(i.rate)}));
+    $('#formTitle').textContent='Editing bill';renderRows();window.scrollTo({top:0,behavior:'smooth'});
+  }
+  if(a==='dl'){
+    const blob=new Blob([billFileHtml(b)],{type:'text/html'});
+    const l=document.createElement('a');l.href=URL.createObjectURL(blob);
+    l.download=`${b.date}_${safe(b.party)}.html`;l.click();setTimeout(()=>URL.revokeObjectURL(l.href),2000);
+  }
+  if(a==='del'){
+    if(!confirm('Delete this bill everywhere (also from Drive)?'))return;
+    bills=bills.filter(x=>x.id!==id);sheetIds=sheetIds.filter(x=>x!==id);
+    if(!dels.includes(id))dels.push(id);
+    persist();refresh();sync();
+  }
+});
+
+/* ---------- Autofill lists ---------- */
+function refreshLists(){
+  const parties=new Set(),items=new Set();rateMap={};
+  bills.slice().sort((a,b)=>a.created-b.created).forEach(b=>{
+    parties.add(b.party);
+    b.items.forEach(i=>{items.add(i.item);rateMap[i.item.toLowerCase()]=i.rate});
+  });
+  $('#parties').innerHTML=[...parties].map(p=>`<option value="${esc(p)}">`).join('');
+  $('#items').innerHTML=[...items].map(p=>`<option value="${esc(p)}">`).join('');
+}
+function refresh(){refreshLists();renderSheet();renderHistory();setStatus()}
+
+/* ---------- Init ---------- */
+bills.forEach(b=>{if(!b.updated)b.updated=b.created||Date.now();if(!b.created)b.created=b.updated});
+$('#date').value=today();
+$('#cfgUrl').value=cfg.url;$('#cfgKey').value=cfg.key;
+if(!cfg.url)$('#settings').open=true;
+renderRows();refresh();sync();
+if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
