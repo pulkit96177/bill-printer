@@ -15,6 +15,7 @@ h2{font-size:14px;margin:0 0 8px;color:#444}
 label{display:block;font-size:12px;color:#555;margin-bottom:6px}
 input{font-size:16px;padding:8px;border:1px solid #bbb;border-radius:6px;width:100%;min-width:0}
 .r2{display:grid;grid-template-columns:1fr 150px;gap:8px;margin-bottom:10px}
+textarea{font-size:16px;padding:8px;border:1px solid #bbb;border-radius:6px;width:100%;min-width:0;font-family:inherit;resize:vertical}
 .row{display:grid;grid-template-columns:18px minmax(0,1fr) minmax(46px,.3fr) minmax(50px,.32fr) minmax(46px,.3fr) 24px;gap:4px;align-items:center;margin-bottom:5px}
 .row input{padding:7px 5px}
 .row .sn{font-size:12px;color:#777;text-align:center}
@@ -74,6 +75,14 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
     <label>Secret key<input id="cfgKey" type="password" autocomplete="off"></label>
     <div class="btns" style="margin-top:0"><button id="cfgSave" class="pri sm">Save &amp; sync</button><button id="cfgRewrite" class="sm">Rewrite all Drive files</button></div>
     <p class="note">Enter the same URL and key on each device. Bills are stored in Drive under Bills / date folders.</p>
+  </details>
+
+  <details class="card" id="masters">
+    <summary>📋 Party &amp; item lists (autofill)</summary>
+    <label>Parties, one per line<textarea id="mParties" rows="6" placeholder="Krishna&#10;Gurukripa"></textarea></label>
+    <label>Items, one per line. Add a default rate after a comma or tab (optional)<textarea id="mItems" rows="8" placeholder="Soyabin, 250&#10;Groundnut, 250&#10;Mustard"></textarea></label>
+    <div class="btns" style="margin-top:0"><button id="mSave" class="pri sm">Save lists</button><button id="mFromBills" class="sm">Add names from saved bills</button></div>
+    <p class="note">You can paste two columns straight from Excel or Sheets (name, rate). A rate typed here is used for autofill; items without a rate use the last rate from your bills.</p>
   </details>
 
   <div class="card">
@@ -149,10 +158,12 @@ function persist(){try{
   localStorage.setItem('bills',JSON.stringify(bills));
   localStorage.setItem('sheet',JSON.stringify(sheetIds));
   localStorage.setItem('dels',JSON.stringify(dels));
+  localStorage.setItem('masters',JSON.stringify(masters));
 }catch(e){}}
 let bills=load('bills',[]);
 let sheetIds=load('sheet',[]);
 let dels=load('dels',[]);
+let masters=load('masters',{parties:[],items:[],updated:0,dirty:false});
 let cfg=load('cfg',{url:'',key:''});
 let rows=[{item:'',qty:'',rate:''}];
 let editingId=null;
@@ -294,13 +305,19 @@ async function sync(manual){
     const send=bills.filter(isDirty);
     const sentUpd={};send.forEach(b=>sentUpd[b.id]=b.updated);
     const sendDels=dels.slice();
-    const body={key:cfg.key,deletes:sendDels,bills:send.map(b=>{const {dirty,...clean}=b;return {bill:clean,html:billFileHtml(b)}})};
+    const wasM=masters.dirty,sentM=masters.updated;
+    const body={key:cfg.key,deletes:sendDels,masters:masters.dirty?{parties:masters.parties,items:masters.items,updated:masters.updated}:undefined,bills:send.map(b=>{const {dirty,...clean}=b;return {bill:clean,html:billFileHtml(b)}})};
     const res=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});
     const j=await res.json();
     if(!j.ok)throw new Error(j.error||'Server error');
 
     send.forEach(b=>{if(b.updated===sentUpd[b.id])b.dirty=false});
     dels=dels.filter(id=>!sendDels.includes(id));
+    if(wasM&&masters.updated===sentM)masters.dirty=false;
+    if(j.masters&&!masters.dirty&&(j.masters.updated||0)>(masters.updated||0)){
+      masters={parties:j.masters.parties||[],items:j.masters.items||[],updated:j.masters.updated,dirty:false};
+      renderMasters();
+    }
 
     const remote=new Set(j.bills.map(b=>b.id));
     j.bills.forEach(rb=>{
@@ -403,14 +420,57 @@ $('#history').addEventListener('click',e=>{
 
 /* ---------- Autofill lists ---------- */
 function refreshLists(){
-  const parties=new Set(),items=new Set();rateMap={};
+  const parties=new Map(),items=new Map();rateMap={};
+  const add=(m,n)=>{const k=n.toLowerCase();if(n&&!m.has(k))m.set(k,n)};
+  masters.parties.forEach(p=>add(parties,p));
+  masters.items.forEach(i=>add(items,i.n));
   bills.slice().sort((a,b)=>a.created-b.created).forEach(b=>{
-    parties.add(b.party);
-    b.items.forEach(i=>{items.add(i.item);rateMap[i.item.toLowerCase()]=i.rate});
+    add(parties,b.party);
+    b.items.forEach(i=>{add(items,i.item);rateMap[i.item.toLowerCase()]=i.rate});
   });
-  $('#parties').innerHTML=[...parties].map(p=>`<option value="${esc(p)}">`).join('');
-  $('#items').innerHTML=[...items].map(p=>`<option value="${esc(p)}">`).join('');
+  masters.items.forEach(i=>{if(i.r!=null)rateMap[i.n.toLowerCase()]=i.r});
+  $('#parties').innerHTML=[...parties.values()].sort((a,b)=>a.localeCompare(b)).map(p=>`<option value="${esc(p)}">`).join('');
+  $('#items').innerHTML=[...items.values()].sort((a,b)=>a.localeCompare(b)).map(p=>`<option value="${esc(p)}">`).join('');
 }
+
+/* ---------- Master lists (typed or pasted by you) ---------- */
+function renderMasters(){
+  $('#mParties').value=masters.parties.join('\n');
+  $('#mItems').value=masters.items.map(i=>i.r!=null?`${i.n}, ${i.r}`:i.n).join('\n');
+  refreshLists();
+}
+function parseParties(txt){
+  const seen=new Set(),out=[];
+  txt.split('\n').forEach(l=>{l=l.trim();const k=l.toLowerCase();if(l&&!seen.has(k)){seen.add(k);out.push(l)}});
+  return out;
+}
+function parseItems(txt){
+  const seen=new Set(),out=[];
+  txt.split('\n').forEach(l=>{
+    l=l.trim();if(!l)return;
+    let n=l,r=null;
+    const m=l.match(/^(.*?)\s*[\t,]\s*(\d+(?:\.\d+)?)\s*$/);
+    if(m){n=m[1].trim();r=parseFloat(m[2])}
+    const k=n.toLowerCase();
+    if(!n||seen.has(k))return;
+    seen.add(k);out.push({n,r});
+  });
+  return out;
+}
+function saveMasters(parties,items,msg){
+  masters={parties,items,updated:Date.now(),dirty:true};
+  persist();renderMasters();toast(msg);sync();
+}
+$('#mSave').onclick=()=>saveMasters(parseParties($('#mParties').value),parseItems($('#mItems').value),`Saved ${parseParties($('#mParties').value).length} parties, ${parseItems($('#mItems').value).length} items`);
+$('#mFromBills').onclick=()=>{
+  const parties=parseParties($('#mParties').value),items=parseItems($('#mItems').value);
+  const pk=new Set(parties.map(p=>p.toLowerCase())),ik=new Set(items.map(i=>i.n.toLowerCase()));
+  bills.slice().sort((a,b)=>a.created-b.created).forEach(b=>{
+    if(!pk.has(b.party.toLowerCase())){pk.add(b.party.toLowerCase());parties.push(b.party)}
+    b.items.forEach(i=>{const k=i.item.toLowerCase();if(i.item&&!ik.has(k)){ik.add(k);items.push({n:i.item,r:i.rate||null})}});
+  });
+  saveMasters(parties,items,'Added names from saved bills');
+};
 function refresh(){refreshLists();renderSheet();renderHistory();setStatus()}
 
 /* ---------- Init ---------- */
@@ -418,7 +478,7 @@ bills.forEach(b=>{if(!b.updated)b.updated=b.created||Date.now();if(!b.created)b.
 $('#date').value=today();
 $('#cfgUrl').value=cfg.url;$('#cfgKey').value=cfg.key;
 if(!cfg.url)$('#settings').open=true;
-renderRows();refresh();sync();
+renderRows();renderMasters();refresh();sync();
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
