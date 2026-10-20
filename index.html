@@ -43,6 +43,10 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 .sheet{width:210mm;height:296mm;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;background:#fff;margin:0;transform-origin:top left}
 .q{padding:6mm;border:.3mm dashed #bbb;overflow:hidden;height:148mm;width:105mm}
 .preview-title{max-width:720px;margin:0 auto;padding:0 10px}
+#viewer{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.55);display:none;align-items:flex-start;justify-content:center;overflow:auto;z-index:20;padding:12px}
+#viewer .vbox{background:#fff;border-radius:10px;padding:12px;max-width:100%}
+#vwrap{overflow:hidden;margin:0 auto;border:1px dashed #bbb}
+#vq{width:105mm;height:148mm;padding:6mm;background:#fff;transform-origin:top left}
 @media (max-width:420px){
   #app{padding:6px}
   .card{padding:10px}
@@ -91,18 +95,19 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
     <div class="r2">
       <label>Party name<input id="party" list="parties" autocomplete="off" placeholder="Party name"></label>
       <label>Date<input id="date" type="date"></label>
+      <label style="grid-column:1/-1">Line below party name (optional, e.g. place)<input id="party2" autocomplete="off" placeholder="e.g. Indore"></label>
     </div>
     <div id="rows"></div>
-    <button id="addRow" class="sm">+ Add item</button>
-    <div class="sum" id="sum"></div>
+        <div class="sum" id="sum"></div>
     <div class="btns">
-      <button id="saveBtn" class="pri">Save &amp; add to sheet</button>
+      <button id="saveBtn" class="pri">Save</button>
       <button id="clearBtn">Clear</button>
     </div>
   </div>
 
   <div class="card">
     <h2>Sheet (4 bills per A4)</h2>
+    <p class="note" style="margin:-4px 0 8px">Add bills here from Saved bills: tap +Sheet, or View then Add to sheet.</p>
     <div class="slots" id="slots"></div>
     <div class="btns">
       <button id="printBtn" class="pri">Print sheet</button>
@@ -122,13 +127,15 @@ summary{cursor:pointer;font-weight:600;padding:4px 0}
 
 <datalist id="parties"></datalist>
 <datalist id="items"></datalist>
+<div id="viewer" class="no-print"><div class="vbox"><div id="vwrap"><div id="vq"></div></div><div class="btns" id="vbtns"></div></div></div>
 <div id="toast"></div>
 
 <script>
 const BILL_CSS=`
 .bill{font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:none;text-size-adjust:none;color:#000;width:100%;height:100%;display:flex;flex-direction:column;border:1.2px solid #000;box-sizing:border-box}
-.bh{flex:none;height:10mm;display:flex;justify-content:space-between;align-items:center;gap:3mm;padding:0 2.5mm;border-bottom:1.2px solid #000}
-.bh .party{font-size:15px;font-weight:700;line-height:1.1;max-height:9mm;overflow:hidden;word-break:break-word}
+.bh{flex:none;min-height:10mm;display:flex;justify-content:space-between;align-items:center;gap:3mm;padding:1mm 2.5mm;border-bottom:1.2px solid #000}
+.bh .party{font-size:15px;font-weight:700;line-height:1.15;word-break:break-word}
+.bh .party small{display:block;font-size:10.5px;font-weight:400;line-height:1.2;margin-top:.4mm}
 .bh .date{font-size:12px;font-weight:600;white-space:nowrap}
 .bb{flex:none;height:12mm;display:flex;align-items:center;justify-content:center;padding:0 2.5mm;border-bottom:1.2px solid #000;overflow:hidden}
 .bb:before,.bb:after{content:"";flex:1;border-top:3px double #000;min-width:4mm}
@@ -185,10 +192,14 @@ function brandHtml(){
   const n=firm.length,size=n<=5?26:n<=10?19:14,sp=n<=5?'.3em':'.1em';
   return `<div class="bb"><span style="font-size:${size}px;letter-spacing:${sp};padding-left:${sp}">${esc(firm)}</span></div>`;
 }
+function partyHtml(b){
+  const pp=b.party.split('\n');
+  return `<div class="party">${esc(pp[0])}${pp.length>1?`<small>${esc(pp.slice(1).join(' '))}</small>`:''}</div>`;
+}
 function totals(items){
   let qty=0,amt=0;
   items.forEach(i=>{qty+=num(i.qty);amt+=r2(num(i.qty)*num(i.rate))});
-  return {count:items.length,qty:r2(qty),amt:r2(amt)};
+  return {count:items.length,qty:r2(qty),amt:Math.round(amt)};
 }
 function billHtml(b){
   const t=totals(b.items);
@@ -199,7 +210,7 @@ function billHtml(b){
       ?`<div class="r"><div class="c s">${n+1}</div><div class="c">${esc(i.item)}</div><div class="c n">${fmt(i.qty)}</div><div class="c n">${fmt(i.rate)}</div><div class="c n">${fmt(r2(i.qty*i.rate))}</div></div>`
       :`<div class="r e"><div class="c s"></div><div class="c"></div><div class="c n"></div><div class="c n"></div><div class="c n"></div></div>`;
   }
-  return `<div class="bill">${brandHtml()}<div class="bh"><div class="party">${esc(b.party)}</div><div class="date">${dmy(b.date)}</div></div>
+  return `<div class="bill">${brandHtml()}<div class="bh">${partyHtml(b)}<div class="date">${dmy(b.date)}</div></div>
 <div class="bt"><div class="r h"><div class="c s">S.no</div><div class="c">Item</div><div class="c n">Qty</div><div class="c n">Rate</div><div class="c n">Total</div></div>${body}<div class="r tr"><div class="c"></div><div class="c">Total items: ${t.count}</div><div class="c n">${fmt(t.qty)}</div><div class="c n"></div><div class="c n">${fmt(t.amt)}</div></div></div></div>`;
 }
 function billFileHtml(b){
@@ -209,20 +220,29 @@ function billFileHtml(b){
 /* ---------- Form ---------- */
 function validRows(){return rows.filter(r=>r.item.trim()||num(r.qty))}
 function rowTotal(r){return r2(num(r.qty)*num(r.rate))}
-function renderRows(){
-  $('#rows').innerHTML=rows.map((r,i)=>`<div class="row" data-i="${i}"><span class="sn">${i+1}</span>
+const rowFilled=r=>!!(r.item.trim()||String(r.qty)!==''||String(r.rate)!=='');
+function rowHtml(r,i){
+  return `<div class="row" data-i="${i}"><span class="sn">${i+1}</span>
 <input class="it" list="items" autocomplete="off" placeholder="Item" value="${esc(r.item)}">
 <input class="qt" type="number" inputmode="decimal" step="any" placeholder="Qty" value="${esc(r.qty)}">
 <input class="rt" type="number" inputmode="decimal" step="any" placeholder="Rate" value="${esc(r.rate)}">
-<span class="tl">${rowTotal(r)?fmt(rowTotal(r)):''}</span><button class="x" tabindex="-1">×</button></div>`).join('');
+<span class="tl">${rowTotal(r)?fmt(rowTotal(r)):''}</span><button class="x" tabindex="-1">×</button></div>`;
+}
+function renderRows(){
+  // always keep one empty row at the end
+  if(rows.length<MAX&&rowFilled(rows[rows.length-1]))rows.push({item:'',qty:'',rate:''});
+  $('#rows').innerHTML=rows.map((r,i)=>rowHtml(r,i)).join('');
   updateSum();
+}
+function addRow(){
+  rows.push({item:'',qty:'',rate:''});
+  $('#rows').insertAdjacentHTML('beforeend',rowHtml(rows[rows.length-1],rows.length-1));
 }
 function updateSum(){
   const t=totals(validRows().map(r=>({qty:num(r.qty),rate:num(r.rate),item:r.item})));
   $('#sum').innerHTML=`Items: ${t.count}/${MAX} &nbsp;·&nbsp; Qty: ${fmt(t.qty)} &nbsp;·&nbsp; Total: ${fmt(t.amt)}`;
 }
 function focusRow(i,cls){const el=document.querySelector(`.row[data-i="${i}"] .${cls}`);if(el)el.focus()}
-function addRow(){rows.push({item:'',qty:'',rate:''});renderRows();focusRow(rows.length-1,'it')}
 
 $('#rows').addEventListener('input',e=>{
   const row=e.target.closest('.row');if(!row)return;
@@ -232,6 +252,7 @@ $('#rows').addEventListener('input',e=>{
   if(e.target.classList.contains('rt'))r.rate=e.target.value;
   row.querySelector('.tl').textContent=rowTotal(r)?fmt(rowTotal(r)):'';
   updateSum();
+  if(+row.dataset.i===rows.length-1&&rows.length<MAX&&rowFilled(r))addRow();
 });
 $('#rows').addEventListener('change',e=>{
   if(!e.target.classList.contains('it'))return;
@@ -255,22 +276,38 @@ $('#rows').addEventListener('keydown',e=>{
   const i=+row.dataset.i;
   if(e.target.classList.contains('it'))focusRow(i,'qt');
   else if(e.target.classList.contains('qt'))focusRow(i,'rt');
-  else if(e.target.classList.contains('rt')){if(i===rows.length-1)addRow();else focusRow(i+1,'it')}
+  else if(e.target.classList.contains('rt')){
+    if(i===rows.length-1&&rows.length<MAX)addRow();
+    if(i+1<rows.length)focusRow(i+1,'it');
+  }
 });
-$('#addRow').onclick=addRow;
 $('#clearBtn').onclick=resetForm;
+/* party name + permanent second line below it */
+let line2Map={};
+$('#party').addEventListener('change',()=>{
+  const l2=$('#party2'),k=$('#party').value.trim().toLowerCase();
+  if(!l2.value.trim()&&line2Map[k])l2.value=line2Map[k];
+});
+$('#party').addEventListener('keydown',e=>{
+  if(e.key!=='Enter')return;
+  e.preventDefault();$('#party2').focus();   // Enter = next line, even if empty
+});
+$('#party2').addEventListener('keydown',e=>{
+  if(e.key!=='Enter')return;
+  e.preventDefault();focusRow(0,'it');
+});
 function resetForm(){
   editingId=null;rows=[{item:'',qty:'',rate:''}];
-  $('#party').value='';$('#formTitle').textContent='New bill';
+  $('#party').value='';$('#party2').value='';$('#formTitle').textContent='New bill';
   renderRows();
 }
 
 /* ---------- Save (always local first) ---------- */
 function saveBill(){
-  const party=$('#party').value.trim();
+  const party=[$('#party').value.trim(),$('#party2').value.trim()].filter(Boolean).join('\n');
   const date=$('#date').value||today();
   const items=validRows().map(r=>({item:r.item.trim(),qty:num(r.qty),rate:num(r.rate)}));
-  if(!party)return toast('Enter party name');
+  if(!$('#party').value.trim())return toast('Enter party name');
   if(!items.length)return toast('Add at least one item');
   if(items.length>MAX)return toast(`Max ${MAX} items fit in one quarter`);
   const now=Date.now();
@@ -286,10 +323,6 @@ function saveBill(){
   b.updated=now;b.dirty=true;
   if(!b.file){const n=new Date(b.created);b.file=pad(n.getHours())+pad(n.getMinutes())+pad(n.getSeconds())+'_'+safe(party)+'_'+b.id.slice(-4)+'.html'}
   let msg=navigator.onLine&&cfg.url?'Saved, syncing to Drive':'Saved on device, will sync when online';
-  if(!sheetIds.includes(b.id)){
-    if(sheetIds.length<4){sheetIds.push(b.id);msg+=` · quarter ${sheetIds.length}`}
-    else msg+=' · sheet is full, print or clear it first';
-  }
   persist();resetForm();refresh();toast(msg);
   sync();
 }
@@ -395,6 +428,47 @@ $('#printBtn').onclick=()=>{
   window.print();
 };
 
+/* ---------- View a saved bill (read-only) ---------- */
+let viewId=null;
+function openView(id){
+  const b=bills.find(x=>x.id===id);if(!b)return;
+  viewId=id;
+  $('#vq').innerHTML=billHtml(b);
+  const z=Math.min(1,(document.documentElement.clientWidth-56)/397);
+  $('#vq').style.transform=`scale(${z})`;
+  const w=$('#vwrap');w.style.width=(397*z)+'px';w.style.height=(560*z)+'px';
+  const on=sheetIds.includes(id);
+  $('#vbtns').innerHTML=`<button class="pri" data-v="edit">Edit</button><button data-v="sheet" ${on?'disabled':''}>${on?'On sheet':'Add to sheet'}</button><button data-v="dl">Download</button><button data-v="close">Close</button>`;
+  $('#viewer').style.display='flex';
+}
+function closeView(){$('#viewer').style.display='none';viewId=null}
+function editBill(id){
+  const b=bills.find(x=>x.id===id);if(!b)return;
+  editingId=id;const pp=b.party.split('\n');
+  $('#party').value=pp[0];$('#party2').value=pp.slice(1).join(' ');$('#date').value=b.date;
+  rows=b.items.map(i=>({item:i.item,qty:String(i.qty),rate:String(i.rate)}));
+  $('#formTitle').textContent='Editing bill';renderRows();window.scrollTo({top:0,behavior:'smooth'});
+}
+function addToSheet(id){
+  if(sheetIds.includes(id))return toast('Already on sheet');
+  if(sheetIds.length>=4)return toast('Sheet is full');
+  sheetIds.push(id);persist();renderSheet();toast(`Added to quarter ${sheetIds.length}`);
+}
+$('#viewer').addEventListener('click',e=>{
+  if(e.target.id==='viewer'){closeView();return}
+  const v=e.target.dataset.v;if(!v)return;
+  const id=viewId,b=bills.find(x=>x.id===id);
+  if(v==='close')closeView();
+  if(v==='edit'){closeView();editBill(id)}
+  if(v==='sheet'&&b){addToSheet(id);openView(id)}
+  if(v==='dl'&&b){
+    const blob=new Blob([billFileHtml(b)],{type:'text/html'});
+    const l=document.createElement('a');l.href=URL.createObjectURL(blob);
+    l.download=`${b.date}_${safe(b.party)}.html`;l.click();setTimeout(()=>URL.revokeObjectURL(l.href),2000);
+  }
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeView()});
+
 /* ---------- History ---------- */
 function renderHistory(){
   const byDate={};
@@ -403,7 +477,7 @@ function renderHistory(){
   if(!dates.length){$('#history').innerHTML='<p class="note">No saved bills yet.</p>';return}
   $('#history').innerHTML=dates.map((d,k)=>`<details ${k===0?'open':''}><summary>📁 ${dmy(d)} (${byDate[d].length})</summary>`+
     byDate[d].slice().sort((a,b)=>b.created-a.created).map(b=>`<div class="hb"><span>${esc(b.party)} · <b>${fmt(totals(b.items).amt)}</b>${isDirty(b)?' <span class="pend">● not on Drive yet</span>':''}</span><span class="btn-grp">
-<button class="sm" data-a="add" data-id="${b.id}">+Sheet</button><button class="sm" data-a="edit" data-id="${b.id}">Edit</button><button class="sm" data-a="dl" data-id="${b.id}">⬇</button><button class="sm" data-a="del" data-id="${b.id}">🗑</button></span></div>`).join('')+`</details>`).join('');
+<button class="sm" data-a="add" data-id="${b.id}">+Sheet</button><button class="sm" data-a="view" data-id="${b.id}">View</button><button class="sm" data-a="dl" data-id="${b.id}">⬇</button><button class="sm" data-a="del" data-id="${b.id}">🗑</button></span></div>`).join('')+`</details>`).join('');
 }
 $('#history').addEventListener('click',e=>{
   const a=e.target.dataset.a,id=e.target.dataset.id;if(!a)return;
@@ -413,11 +487,7 @@ $('#history').addEventListener('click',e=>{
     if(sheetIds.length>=4)return toast('Sheet is full');
     sheetIds.push(id);persist();renderSheet();toast(`Added to quarter ${sheetIds.length}`);
   }
-  if(a==='edit'){
-    editingId=id;$('#party').value=b.party;$('#date').value=b.date;
-    rows=b.items.map(i=>({item:i.item,qty:String(i.qty),rate:String(i.rate)}));
-    $('#formTitle').textContent='Editing bill';renderRows();window.scrollTo({top:0,behavior:'smooth'});
-  }
+  if(a==='view')openView(id);
   if(a==='dl'){
     const blob=new Blob([billFileHtml(b)],{type:'text/html'});
     const l=document.createElement('a');l.href=URL.createObjectURL(blob);
@@ -433,14 +503,14 @@ $('#history').addEventListener('click',e=>{
 
 /* ---------- Autofill lists ---------- */
 function refreshLists(){
-  const parties=new Map(),items=new Map();rateMap={};
-  const add=(m,n)=>{const k=n.toLowerCase();if(n&&!m.has(k))m.set(k,n)};
-  masters.parties.forEach(p=>add(parties,p));
+  const parties=new Map(),items=new Map();rateMap={};line2Map={};
+  const add=(m,n)=>{const k=n.replace(/\s*\n\s*/g,' ').toLowerCase();if(n&&!m.has(k))m.set(k,n)};
   masters.items.forEach(i=>add(items,i.n));
   bills.slice().sort((a,b)=>a.created-b.created).forEach(b=>{
-    add(parties,b.party);
+    const pp=b.party.split('\n');add(parties,pp[0]);if(pp[1])line2Map[pp[0].toLowerCase()]=pp.slice(1).join(' ');
     b.items.forEach(i=>{add(items,i.item);rateMap[i.item.toLowerCase()]=i.rate});
   });
+  masters.parties.forEach(p=>add(parties,p));
   masters.items.forEach(i=>{if(i.r!=null)rateMap[i.n.toLowerCase()]=i.r});
   $('#parties').innerHTML=[...parties.values()].sort((a,b)=>a.localeCompare(b)).map(p=>`<option value="${esc(p)}">`).join('');
   $('#items').innerHTML=[...items.values()].sort((a,b)=>a.localeCompare(b)).map(p=>`<option value="${esc(p)}">`).join('');
@@ -479,7 +549,8 @@ $('#mFromBills').onclick=()=>{
   const parties=parseParties($('#mParties').value),items=parseItems($('#mItems').value);
   const pk=new Set(parties.map(p=>p.toLowerCase())),ik=new Set(items.map(i=>i.n.toLowerCase()));
   bills.slice().sort((a,b)=>a.created-b.created).forEach(b=>{
-    if(!pk.has(b.party.toLowerCase())){pk.add(b.party.toLowerCase());parties.push(b.party)}
+    const pf=b.party.split('\n')[0];
+    if(!pk.has(pf.toLowerCase())){pk.add(pf.toLowerCase());parties.push(pf)}
     b.items.forEach(i=>{const k=i.item.toLowerCase();if(i.item&&!ik.has(k)){ik.add(k);items.push({n:i.item,r:i.rate||null})}});
   });
   saveMasters(parties,items,'Added names from saved bills');
