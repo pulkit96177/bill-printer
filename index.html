@@ -32,6 +32,11 @@ button.sm{font-size:13px;padding:5px 8px}
 .hb{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;padding:6px 0;border-top:1px solid #eee;font-size:14px}
 .hb .btn-grp{display:flex;gap:4px;flex-shrink:0}
 .pend{color:#e65100;font-size:12px}
+@media (max-width:600px){
+  .hb>span:first-child{flex:1 1 100%}
+  .hb .btn-grp{width:100%}
+  .hb .btn-grp button{flex:1;padding:8px 4px}
+}
 details{margin-bottom:6px}
 summary{cursor:pointer;font-weight:600;padding:4px 0}
 #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:8px;font-size:14px;display:none;z-index:10;max-width:90vw}
