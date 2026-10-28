@@ -376,6 +376,7 @@ async function sync(manual){
     });
     bills=bills.filter(b=>isDirty(b)||remote.has(b.id));   // drop ones deleted on another device
     lastSync=new Date();
+    pruneLocal()
     persist();refresh();
     if(manual)toast('Synced');
   }catch(e){
@@ -545,6 +546,12 @@ function parseItems(txt){
   });
   return out;
 }
+function pruneLocal(){
+  const d=new Date();d.setDate(d.getDate()-30);
+  const cut=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  bills=bills.filter(b=>b.date>=cut||isDirty(b));
+  sheetIds=sheetIds.filter(id=>bills.some(b=>b.id===id));
+}
 function saveMasters(parties,items,msg){
   masters={parties,items,updated:Date.now(),dirty:true};
   persist();renderMasters();toast(msg);sync();
@@ -567,6 +574,7 @@ bills.forEach(b=>{if(!b.updated)b.updated=b.created||Date.now();if(!b.created)b.
 $('#date').value=today();
 $('#cfgUrl').value=cfg.url;$('#cfgKey').value=cfg.key;$('#cfgFirm').value=firm;
 if(!cfg.url)$('#settings').open=true;
+pruneLocal()
 renderRows();renderMasters();refresh();sync();
 if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
